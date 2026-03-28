@@ -185,6 +185,18 @@ export function HomeClient() {
   const [showUpload, setShowUpload] = useState(false);
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState('');
+
+  const filtered = query.trim()
+    ? playlists.filter(p => {
+        const q = query.toLowerCase();
+        return (
+          p.title.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q) ||
+          p.emoji?.includes(q)
+        );
+      })
+    : playlists;
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -252,6 +264,47 @@ export function HomeClient() {
         </div>
       </header>
 
+      {/* Search bar */}
+      {isHydrated && playlists.length > 0 && (
+        <div className="bg-white/80 backdrop-blur-md border-b border-stone-100/80">
+          <div className="max-w-lg mx-auto px-4 pb-3">
+            <div className="relative">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+                />
+              </svg>
+              <input
+                type="search"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search playlists…"
+                className="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-300 transition-all"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                  aria-label="Clear search"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="max-w-lg mx-auto px-4 py-5">
         {!isHydrated ? (
@@ -271,17 +324,33 @@ export function HomeClient() {
               </div>
             )}
 
-            {playlists.map(playlist => (
-              <PlaylistCard
-                key={playlist.id}
-                playlist={playlist}
-                onStudy={() => router.push(`/study/${playlist.id}`)}
-                onDelete={() => removePlaylist(playlist.id)}
-                isSelected={selectedIds.has(playlist.id)}
-                isSelectMode={isSelectMode}
-                onToggleSelect={() => toggleSelect(playlist.id)}
-              />
-            ))}
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center py-12 text-center">
+                <span className="text-4xl mb-3">🔍</span>
+                <p className="font-semibold text-stone-600 text-sm">No playlists match</p>
+                <p className="text-stone-400 text-xs mt-1">
+                  Try a different search term
+                </p>
+                <button
+                  onClick={() => setQuery('')}
+                  className="mt-4 text-xs font-semibold text-violet-600 hover:underline"
+                >
+                  Clear search
+                </button>
+              </div>
+            ) : (
+              filtered.map(playlist => (
+                <PlaylistCard
+                  key={playlist.id}
+                  playlist={playlist}
+                  onStudy={() => router.push(`/study/${playlist.id}`)}
+                  onDelete={() => removePlaylist(playlist.id)}
+                  isSelected={selectedIds.has(playlist.id)}
+                  isSelectMode={isSelectMode}
+                  onToggleSelect={() => toggleSelect(playlist.id)}
+                />
+              ))
+            )}
           </div>
         )}
       </main>

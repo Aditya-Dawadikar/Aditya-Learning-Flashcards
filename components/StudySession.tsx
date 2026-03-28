@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FlashCard } from './FlashCard';
 import { shuffle } from '@/utils/shuffle';
@@ -151,6 +151,39 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
 
   const currentCard = cards[index];
 
+  // ── Swipe detection ─────────────────────────────────────────
+  // touchStart records finger-down position; didSwipe prevents
+  // the subsequent onClick from also triggering a flip.
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const didSwipe = useRef(false);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    didSwipe.current = false;
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchStart.current) return;
+      const dx = e.changedTouches[0].clientX - touchStart.current.x;
+      const dy = e.changedTouches[0].clientY - touchStart.current.y;
+      const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 48;
+      if (isHorizontal) {
+        didSwipe.current = true;
+        setIsFlipped(false);
+        if (dx < 0 && index < cards.length - 1) setIndex(i => i + 1); // swipe left → next
+        if (dx > 0 && index > 0) setIndex(i => i - 1);               // swipe right → prev
+      }
+    },
+    [index, cards.length],
+  );
+
+  // Flip only when it wasn't a swipe gesture
+  const handleFlipGuarded = useCallback(() => {
+    if (didSwipe.current) return;
+    handleFlip();
+  }, [handleFlip]);
+
   return (
     <div className="flex flex-col min-h-screen max-w-lg mx-auto">
       {/* Header */}
@@ -195,12 +228,29 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
 
       {/* Card + actions */}
       <div className="flex-1 flex flex-col px-4 py-5 gap-5">
-        <FlashCard
-          card={currentCard}
-          colorIndex={colorMap[index]}
-          isFlipped={isFlipped}
-          onFlip={handleFlip}
-        />
+        {/* Swipe wrapper — captures horizontal swipes without blocking the flip tap */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          <FlashCard
+            card={currentCard}
+            colorIndex={colorMap[index]}
+            isFlipped={isFlipped}
+            onFlip={handleFlipGuarded}
+          />
+        </div>
+
+        {/* Swipe hint */}
+        <div className="flex items-center justify-center gap-3 -mt-2">
+          <span className={`text-xs transition-opacity ${index > 0 ? 'text-stone-300' : 'opacity-0'}`}>
+            ← prev
+          </span>
+          <span className="text-xs text-stone-200">·</span>
+          <span className={`text-xs transition-opacity ${index < cards.length - 1 ? 'text-stone-300' : 'opacity-0'}`}>
+            next →
+          </span>
+        </div>
 
         {/* Rating buttons (shown after flip) */}
         {isFlipped ? (
