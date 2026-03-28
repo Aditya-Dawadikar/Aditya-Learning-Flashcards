@@ -1,0 +1,7 @@
+# Never read environment files
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+**/*.env
