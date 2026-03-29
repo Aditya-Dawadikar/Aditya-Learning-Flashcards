@@ -21,7 +21,7 @@ export function usePlaylists() {
 
   // Optimistic add: update local state immediately, sync to S3 in background
   const addPlaylist = useCallback(
-    (data: { title: string; description?: string; emoji?: string; cards: Card[] }): Playlist => {
+    (data: { title: string; description?: string; emoji?: string; cards: Card[]; folderId?: string }): Playlist => {
       const playlist: Playlist = {
         id: crypto.randomUUID(),
         title: data.title,
@@ -30,6 +30,7 @@ export function usePlaylists() {
         cards: data.cards,
         createdAt: new Date().toISOString(),
         colorIndex: Math.floor(Math.random() * NUM_COLORS),
+        folderId: data.folderId,
       };
       setPlaylists(prev => [playlist, ...prev]);
       fetch('/api/playlists', {
@@ -48,6 +49,20 @@ export function usePlaylists() {
     fetch(`/api/playlists/${id}`, { method: 'DELETE' }).catch(console.error);
   }, []);
 
+  // Optimistic move: update folderId locally, sync to S3 in background
+  const movePlaylist = useCallback((id: string, folderId: string | null) => {
+    setPlaylists(prev =>
+      prev.map(p =>
+        p.id === id ? { ...p, folderId: folderId ?? undefined } : p,
+      ),
+    );
+    fetch(`/api/playlists/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId }),
+    }).catch(console.error);
+  }, []);
+
   const getPlaylist = useCallback(
     (id: string): Playlist | undefined => playlists.find(p => p.id === id),
     [playlists],
@@ -58,5 +73,5 @@ export function usePlaylists() {
     [playlists],
   );
 
-  return { playlists, addPlaylist, removePlaylist, getPlaylist, getPlaylists, isHydrated };
+  return { playlists, addPlaylist, removePlaylist, movePlaylist, getPlaylist, getPlaylists, isHydrated };
 }
