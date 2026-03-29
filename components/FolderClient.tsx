@@ -1,91 +1,35 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePlaylists } from '@/hooks/usePlaylists';
 import { useFolders } from '@/hooks/useFolders';
 import { UploadModal } from '@/components/UploadModal';
+import { OrganizeModal } from '@/components/OrganizeModal';
 import { STRIP_GRADIENTS } from '@/lib/colors';
 import type { Playlist, Folder } from '@/types';
 
 type SelectMode = 'none' | 'mix' | 'delete';
 
-/* ─── MoveFolderPopover ────────────────────────────────────── */
-
-function MoveFolderPopover({
-  folders,
-  currentFolderId,
-  onMove,
-  onClose,
-}: {
-  folders: Folder[];
-  currentFolderId?: string;
-  onMove: (folderId: string | null) => void;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const otherFolders = folders.filter(f => f.id !== currentFolderId);
-
-  return (
-    <div
-      ref={ref}
-      className="absolute right-0 top-8 z-30 w-44 bg-white border border-stone-100 rounded-xl shadow-lg py-1 text-sm"
-    >
-      <p className="px-3 py-1.5 text-xs font-semibold text-stone-400 uppercase tracking-wider">Move to…</p>
-      <button
-        onClick={() => { onMove(null); onClose(); }}
-        className="w-full text-left px-3 py-2 hover:bg-stone-50 text-stone-600 flex items-center gap-2"
-      >
-        <span>🏠</span> No folder
-      </button>
-      {otherFolders.map(f => (
-        <button
-          key={f.id}
-          onClick={() => { onMove(f.id); onClose(); }}
-          className="w-full text-left px-3 py-2 hover:bg-stone-50 text-stone-600 flex items-center gap-2"
-        >
-          <span>{f.emoji ?? '📁'}</span>
-          <span className="truncate">{f.name}</span>
-        </button>
-      ))}
-      {otherFolders.length === 0 && (
-        <p className="px-3 py-2 text-stone-400 text-xs">No other folders</p>
-      )}
-    </div>
-  );
-}
-
 /* ─── PlaylistCard ─────────────────────────────────────────── */
 
 function PlaylistCard({
   playlist,
-  folders,
   onStudy,
   onDelete,
-  onMove,
+  onOrganize,
   selectMode,
   isSelected,
   onToggleSelect,
 }: {
   playlist: Playlist;
-  folders: Folder[];
   onStudy: () => void;
   onDelete: () => void;
-  onMove: (folderId: string | null) => void;
+  onOrganize: () => void;
   selectMode: SelectMode;
   isSelected: boolean;
   onToggleSelect: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [showMove, setShowMove] = useState(false);
   const strip = STRIP_GRADIENTS[playlist.colorIndex % STRIP_GRADIENTS.length];
 
   const daysAgo = Math.floor(
@@ -153,25 +97,12 @@ function PlaylistCard({
           {/* Action buttons — normal mode only */}
           {selectMode === 'none' && (
             <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
-              <div className="relative">
-                <button
-                  onClick={() => setShowMove(v => !v)}
-                  className="p-1.5 text-stone-300 hover:text-violet-400 hover:bg-violet-50 rounded-lg transition-colors"
-                  aria-label="Move to folder"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                  </svg>
-                </button>
-                {showMove && (
-                  <MoveFolderPopover
-                    folders={folders}
-                    currentFolderId={playlist.folderId}
-                    onMove={onMove}
-                    onClose={() => setShowMove(false)}
-                  />
-                )}
-              </div>
+              <button
+                onClick={onOrganize}
+                className="px-2.5 py-1.5 text-xs font-semibold text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
+              >
+                Organize
+              </button>
 
               {confirmDelete ? (
                 <div className="flex items-center gap-1">
@@ -312,6 +243,7 @@ export function FolderClient({ folderId }: { folderId: string }) {
   const [selectMode, setSelectMode] = useState<SelectMode>('none');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
+  const [organizePlaylist, setOrganizePlaylist] = useState<Playlist | null>(null);
 
   const folder = getFolder(folderId);
   const folderPlaylists = playlists.filter(p => p.folderId === folderId);
@@ -534,10 +466,9 @@ export function FolderClient({ folderId }: { folderId: string }) {
               <PlaylistCard
                 key={playlist.id}
                 playlist={playlist}
-                folders={folders}
                 onStudy={() => router.push(`/study/${playlist.id}`)}
                 onDelete={() => removePlaylist(playlist.id)}
-                onMove={newFolderId => movePlaylist(playlist.id, newFolderId)}
+                onOrganize={() => setOrganizePlaylist(playlist)}
                 selectMode={selectMode}
                 isSelected={selectedIds.has(playlist.id)}
                 onToggleSelect={() => toggleSelect(playlist.id)}
@@ -584,6 +515,14 @@ export function FolderClient({ folderId }: { folderId: string }) {
         <UploadModal
           onClose={() => setShowUpload(false)}
           onUpload={data => addPlaylist({ ...data, folderId })}
+        />
+      )}
+      {organizePlaylist && (
+        <OrganizeModal
+          playlist={organizePlaylist}
+          folders={folders}
+          onMove={newFolderId => movePlaylist(organizePlaylist.id, newFolderId)}
+          onClose={() => setOrganizePlaylist(null)}
         />
       )}
     </div>

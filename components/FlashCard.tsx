@@ -1,4 +1,5 @@
 'use client';
+import ReactMarkdown from 'react-markdown';
 import type { Card } from '@/types';
 import { CARD_FRONT_GRADIENTS, CARD_BACK_GRADIENTS } from '@/lib/colors';
 
@@ -39,10 +40,10 @@ export function FlashCard({ card, colorIndex, isFlipped, onFlip }: FlashCardProp
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">
               Question
             </span>
-            <div className="flex-1 flex items-center justify-center py-3">
-              <p className="text-white text-xl sm:text-2xl font-semibold text-center leading-relaxed">
-                {card.front}
-              </p>
+            <div className="flex-1 flex items-center justify-center py-3 overflow-y-auto">
+              <div className="text-white text-xl sm:text-2xl font-semibold leading-relaxed prose prose-invert prose-sm sm:prose-base max-w-none [&_*]:text-white [&_code]:bg-white/20 [&_code]:px-1 [&_code]:rounded [&_pre]:bg-white/20 [&_pre]:rounded-xl [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0">
+                <ReactMarkdown>{card.front}</ReactMarkdown>
+              </div>
             </div>
             <div className="flex items-center justify-center gap-2 pb-1">
               <div className="w-6 h-px bg-white/20" />
@@ -63,13 +64,13 @@ export function FlashCard({ card, colorIndex, isFlipped, onFlip }: FlashCardProp
 
             {/* Answer — shrinks when explanation is present */}
             <div
-              className={`flex items-center justify-center py-2 ${card.explanation ? 'flex-shrink-0 pt-3 pb-2' : 'flex-1 py-3'}`}
+              className={`flex items-center justify-center py-2 ${card.explanation ? 'flex-shrink-0 pt-3 pb-2 overflow-y-auto max-h-[40%]' : 'flex-1 py-3 overflow-y-auto'}`}
             >
-              <p
-                className={`text-white font-semibold text-center leading-relaxed ${card.explanation ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'}`}
+              <div
+                className={`text-white font-semibold text-center leading-relaxed prose prose-invert max-w-none [&_*]:text-white [&_code]:bg-white/20 [&_code]:px-1 [&_code]:rounded [&_pre]:bg-white/20 [&_pre]:rounded-xl [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 ${card.explanation ? 'prose-sm sm:prose-base' : 'prose-base sm:prose-lg'}`}
               >
-                {card.back}
-              </p>
+                <ReactMarkdown>{card.back}</ReactMarkdown>
+              </div>
             </div>
 
             {/* Explanation panel */}
@@ -79,7 +80,9 @@ export function FlashCard({ card, colorIndex, isFlipped, onFlip }: FlashCardProp
                   <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest mb-1.5">
                     Explanation
                   </p>
-                  <p className="text-white/90 text-sm leading-relaxed">{card.explanation}</p>
+                  <div className="text-white/90 text-sm leading-relaxed prose prose-invert prose-sm max-w-none [&_*]:text-white/90 [&_code]:bg-white/20 [&_code]:px-1 [&_code]:rounded [&_pre]:bg-white/20 [&_pre]:rounded-xl [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0">
+                    <ReactMarkdown>{card.explanation}</ReactMarkdown>
+                  </div>
                 </div>
               </div>
             )}
@@ -87,7 +90,9 @@ export function FlashCard({ card, colorIndex, isFlipped, onFlip }: FlashCardProp
             {/* Hint (shown when no explanation, or below explanation) */}
             {card.hint && (
               <div className="flex-shrink-0 mt-2 bg-white/10 rounded-2xl px-4 py-2 text-center">
-                <p className="text-white/60 text-xs">💡 {card.hint}</p>
+                <div className="text-white/60 text-xs prose prose-invert prose-xs max-w-none [&_*]:text-white/60 [&_p]:m-0">
+                  💡 <ReactMarkdown>{card.hint}</ReactMarkdown>
+                </div>
               </div>
             )}
 

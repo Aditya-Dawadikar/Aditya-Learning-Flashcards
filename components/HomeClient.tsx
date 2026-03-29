@@ -5,6 +5,7 @@ import { usePlaylists } from '@/hooks/usePlaylists';
 import { useFolders } from '@/hooks/useFolders';
 import { UploadModal } from '@/components/UploadModal';
 import { CreateFolderModal } from '@/components/CreateFolderModal';
+import { OrganizeModal } from '@/components/OrganizeModal';
 import { STRIP_GRADIENTS } from '@/lib/colors';
 import type { Playlist, Folder } from '@/types';
 
@@ -259,19 +260,113 @@ function EmptyState({ onNewFolder }: { onNewFolder: () => void }) {
   );
 }
 
+/* ─── RootPlaylistCard ─────────────────────────────────────── */
+
+function RootPlaylistCard({
+  playlist,
+  onStudy,
+  onOrganize,
+  onDelete,
+}: {
+  playlist: Playlist;
+  onStudy: () => void;
+  onOrganize: () => void;
+  onDelete: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const strip = STRIP_GRADIENTS[playlist.colorIndex % STRIP_GRADIENTS.length];
+
+  const daysAgo = Math.floor(
+    (Date.now() - new Date(playlist.createdAt).getTime()) / 86_400_000,
+  );
+  const dateStr =
+    daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`;
+
+  return (
+    <div className="bg-white rounded-2xl border border-stone-100 shadow-sm overflow-hidden">
+      <div className={`h-1.5 bg-gradient-to-r ${strip}`} />
+      <div className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xl leading-none">{playlist.emoji}</span>
+              <h3 className="font-bold text-stone-800 text-sm truncate">{playlist.title}</h3>
+            </div>
+            {playlist.description && (
+              <p className="text-xs text-stone-400 mt-0.5 truncate">{playlist.description}</p>
+            )}
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs bg-stone-50 border border-stone-100 text-stone-500 px-2 py-0.5 rounded-full">
+                {playlist.cards.length} cards
+              </span>
+              <span className="text-xs text-stone-300">{dateStr}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+            <button
+              onClick={onOrganize}
+              className="px-2.5 py-1.5 text-xs font-semibold text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
+            >
+              Organize
+            </button>
+
+            {confirmDelete ? (
+              <div className="flex items-center gap-1 ml-1">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-xs text-stone-400 px-2 py-1 rounded-lg hover:bg-stone-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onDelete}
+                  className="text-xs text-rose-500 font-semibold px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="p-1.5 text-stone-300 hover:text-rose-400 hover:bg-rose-50 rounded-lg transition-colors"
+                aria-label="Delete playlist"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={onStudy}
+          className={`mt-3 w-full py-2.5 bg-gradient-to-r ${strip} text-white rounded-xl font-semibold text-sm shadow-sm active:scale-[0.98] transition-transform`}
+        >
+          Study Now →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── HomeClient ───────────────────────────────────────────── */
 
 export function HomeClient() {
   const router = useRouter();
-  const { playlists, addPlaylist, isHydrated } = usePlaylists();
+  const { playlists, addPlaylist, removePlaylist, movePlaylist, isHydrated } = usePlaylists();
   const { folders, addFolder, removeFolder, isHydrated: foldersHydrated } = useFolders();
   const [showUpload, setShowUpload] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [query, setQuery] = useState('');
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [organizePlaylist, setOrganizePlaylist] = useState<Playlist | null>(null);
 
   const allHydrated = isHydrated && foldersHydrated;
+
+  const rootPlaylists = playlists.filter(p => !p.folderId);
 
   const isSearching = query.trim().length > 0;
 
@@ -450,47 +545,86 @@ export function HomeClient() {
               </div>
             )}
           </div>
-        ) : folders.length === 0 ? (
-          /* ── No folders ── */
+        ) : folders.length === 0 && rootPlaylists.length === 0 ? (
+          /* ── Nothing at all ── */
           <EmptyState onNewFolder={() => setShowCreateFolder(true)} />
         ) : (
-          /* ── Folder grid ── */
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              {isSelectMode ? (
-                <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
-                  {selectedIds.size === 0
-                    ? 'Tap folders to select'
-                    : `${selectedIds.size} selected`}
-                </p>
-              ) : (
-                <>
+          /* ── Folder grid + Root playlists ── */
+          <div className="space-y-6">
+            {/* Folders section */}
+            {folders.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  {isSelectMode ? (
+                    <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                      {selectedIds.size === 0
+                        ? 'Tap folders to select'
+                        : `${selectedIds.size} selected`}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
+                        {folders.length} {folders.length === 1 ? 'folder' : 'folders'}
+                      </p>
+                      <button
+                        onClick={() => setShowCreateFolder(true)}
+                        className="text-xs text-violet-600 font-semibold hover:underline"
+                      >
+                        + New folder
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {folders.map(folder => (
+                    <FolderCard
+                      key={folder.id}
+                      folder={folder}
+                      playlistCount={playlistCountFor(folder.id)}
+                      onOpen={() => router.push(`/folders/${folder.id}`)}
+                      onDelete={() => removeFolder(folder.id)}
+                      isSelectMode={isSelectMode}
+                      isSelected={selectedIds.has(folder.id)}
+                      onToggleSelect={() => toggleSelect(folder.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Root playlists section */}
+            {rootPlaylists.length > 0 && !isSelectMode && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-bold text-stone-400 uppercase tracking-wider">
-                    {folders.length} {folders.length === 1 ? 'folder' : 'folders'}
+                    🏠 Root · {rootPlaylists.length} {rootPlaylists.length === 1 ? 'playlist' : 'playlists'}
                   </p>
-                  <button
-                    onClick={() => setShowCreateFolder(true)}
-                    className="text-xs text-violet-600 font-semibold hover:underline"
-                  >
-                    + New folder
-                  </button>
-                </>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {folders.map(folder => (
-                <FolderCard
-                  key={folder.id}
-                  folder={folder}
-                  playlistCount={playlistCountFor(folder.id)}
-                  onOpen={() => router.push(`/folders/${folder.id}`)}
-                  onDelete={() => removeFolder(folder.id)}
-                  isSelectMode={isSelectMode}
-                  isSelected={selectedIds.has(folder.id)}
-                  onToggleSelect={() => toggleSelect(folder.id)}
-                />
-              ))}
-            </div>
+                </div>
+                <div className="space-y-3">
+                  {rootPlaylists.map(playlist => (
+                    <RootPlaylistCard
+                      key={playlist.id}
+                      playlist={playlist}
+                      onStudy={() => router.push(`/study/${playlist.id}`)}
+                      onOrganize={() => setOrganizePlaylist(playlist)}
+                      onDelete={() => removePlaylist(playlist.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty folders hint when no folders yet */}
+            {folders.length === 0 && rootPlaylists.length > 0 && (
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setShowCreateFolder(true)}
+                  className="text-xs text-violet-600 font-semibold hover:underline"
+                >
+                  + Create a folder to organize these playlists
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -516,6 +650,14 @@ export function HomeClient() {
         <CreateFolderModal
           onClose={() => setShowCreateFolder(false)}
           onCreate={data => addFolder(data)}
+        />
+      )}
+      {organizePlaylist && (
+        <OrganizeModal
+          playlist={organizePlaylist}
+          folders={folders}
+          onMove={folderId => movePlaylist(organizePlaylist.id, folderId)}
+          onClose={() => setOrganizePlaylist(null)}
         />
       )}
     </div>
