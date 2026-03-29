@@ -6,11 +6,13 @@ import { CARD_FRONT_GRADIENTS, CARD_BACK_GRADIENTS } from '@/lib/colors';
 interface FlashCardProps {
   card: Card;
   colorIndex: number;
+  cardNumber: number;
+  totalCards: number;
   isFlipped: boolean;
   onFlip: () => void;
 }
 
-export function FlashCard({ card, colorIndex, isFlipped, onFlip }: FlashCardProps) {
+export function FlashCard({ card, colorIndex, cardNumber, totalCards, isFlipped, onFlip }: FlashCardProps) {
   const frontGrad = CARD_FRONT_GRADIENTS[colorIndex % CARD_FRONT_GRADIENTS.length];
   const backGrad = CARD_BACK_GRADIENTS[colorIndex % CARD_BACK_GRADIENTS.length];
 
@@ -37,9 +39,14 @@ export function FlashCard({ card, colorIndex, isFlipped, onFlip }: FlashCardProp
           className={`absolute inset-0 backface-hidden rounded-3xl bg-gradient-to-br ${frontGrad} shadow-xl`}
         >
           <div className="flex flex-col h-full p-6 sm:p-8">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">
-              Question
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">
+                Question
+              </span>
+              <span className="text-[11px] font-bold text-white/70 bg-white/15 px-2.5 py-0.5 rounded-full">
+                {cardNumber} / {totalCards}
+              </span>
+            </div>
             <div className="flex-1 flex items-center justify-center py-3 overflow-y-auto">
               <div className="text-white text-xl sm:text-2xl font-semibold leading-relaxed prose prose-invert prose-sm sm:prose-base max-w-none [&_*]:text-white [&_code]:bg-white/20 [&_code]:px-1 [&_code]:rounded [&_pre]:bg-white/20 [&_pre]:rounded-xl [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0">
                 <ReactMarkdown>{card.front}</ReactMarkdown>

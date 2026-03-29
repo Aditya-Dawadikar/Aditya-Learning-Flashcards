@@ -30,6 +30,18 @@
   }
 }
 
+/* ── Card stack animations ──────────────────────────────────── */
+@keyframes cardEnterPrev {
+  from {
+    transform: translateY(28px) scale(0.86) rotate(-2deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0px) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
 /* ── Base ───────────────────────────────────────────────────── */
 body {
   background-color: #fdf8f0;

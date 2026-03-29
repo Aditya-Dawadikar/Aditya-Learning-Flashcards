@@ -1,11 +1,36 @@
 'use client';
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FlashCard } from './FlashCard';
 import { shuffle } from '@/utils/shuffle';
 import type { Card, Playlist } from '@/types';
 
 type CardResult = 'got-it' | 'review';
+type AnimDir = 'next' | 'prev' | null;
+type StackPos = 'top' | 'mid' | 'back' | 'exit-next' | 'exit-prev';
+
+const ANIM_MS = 380;
+
+interface StackItem {
+  cardIdx: number;
+  pos: StackPos;
+  enterAnim: boolean; // play cardEnterPrev keyframe (newly mounted top card when going prev)
+}
+
+function stackStyle(pos: StackPos): React.CSSProperties {
+  switch (pos) {
+    case 'top':
+      return { transform: 'translateY(0px) scale(1)', opacity: 1, zIndex: 30 };
+    case 'mid':
+      return { transform: 'translateY(12px) scale(0.95)', opacity: 1, zIndex: 20 };
+    case 'back':
+      return { transform: 'translateY(24px) scale(0.90)', opacity: 1, zIndex: 10 };
+    case 'exit-next':
+      return { transform: 'translateY(36px) scale(0.82) rotate(4deg)', opacity: 0, zIndex: 5 };
+    case 'exit-prev':
+      return { transform: 'translateY(36px) scale(0.82) rotate(-4deg)', opacity: 0, zIndex: 5 };
+  }
+}
 
 interface StudySessionProps {
   playlists: Playlist[];
@@ -18,16 +43,16 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
   const [sessionKey, setSessionKey] = useState(0);
 
   const { cards, colorMap } = useMemo(() => {
-    const pairs: Array<{ card: Card; colorIndex: number }> = [];
+    const pairs: Array<{ card: Card }> = [];
     for (const pl of playlists) {
       for (const card of pl.cards) {
-        pairs.push({ card, colorIndex: pl.colorIndex });
+        pairs.push({ card });
       }
     }
     const shuffled = shuffle(pairs);
     return {
       cards: shuffled.map(p => p.card),
-      colorMap: shuffled.map(p => p.colorIndex),
+      colorMap: shuffled.map((_, i) => i),
     };
     // sessionKey forces a re-shuffle on restart
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -39,6 +64,26 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
     Array(cards.length).fill(null),
   );
   const [isComplete, setIsComplete] = useState(false);
+  const [animDir, setAnimDir] = useState<AnimDir>(null);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up animation timer on unmount
+  useEffect(() => () => { if (animTimerRef.current) clearTimeout(animTimerRef.current); }, []);
+
+  const navigate = useCallback(
+    (dir: 'next' | 'prev') => {
+      if (animDir !== null) return;
+      if (dir === 'next' && index >= cards.length - 1) return;
+      if (dir === 'prev' && index <= 0) return;
+      setIsFlipped(false);
+      setAnimDir(dir);
+      animTimerRef.current = setTimeout(() => {
+        setIndex(i => (dir === 'next' ? i + 1 : i - 1));
+        setAnimDir(null);
+      }, ANIM_MS);
+    },
+    [animDir, index, cards.length],
+  );
 
   const handleFlip = useCallback(() => setIsFlipped(f => !f), []);
 
@@ -50,16 +95,17 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
         return next;
       });
       if (index < cards.length - 1) {
-        setIndex(i => i + 1);
-        setIsFlipped(false);
+        navigate('next');
       } else {
         setIsComplete(true);
       }
     },
-    [index, cards.length],
+    [index, cards.length, navigate],
   );
 
   const handleRestart = useCallback(() => {
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    setAnimDir(null);
     setSessionKey(k => k + 1);
     setIndex(0);
     setIsFlipped(false);
@@ -149,59 +195,80 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
     );
   }
 
-  const currentCard = cards[index];
-
-  // ── Drag / swipe detection ───────────────────────────────────
-  // dragX drives the live card translation while the finger is down.
-  // didSwipe blocks the click→flip that fires after every touch.
+  // ── Swipe detection ────────────────────────────────────────────
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const didSwipe = useRef(false);
-  const [dragX, setDragX] = useState(0);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     didSwipe.current = false;
   }, []);
 
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (!touchStart.current) return;
-      const dx = e.touches[0].clientX - touchStart.current.x;
-      const dy = e.touches[0].clientY - touchStart.current.y;
-      if (Math.abs(dx) <= Math.abs(dy)) return; // vertical scroll — don't interfere
-      const canNext = index < cards.length - 1;
-      const canPrev = index > 0;
-      const atEdge = (dx < 0 && !canNext) || (dx > 0 && !canPrev);
-      // Rubber-band resistance at edges
-      setDragX(atEdge ? dx * 0.15 : dx);
-    },
-    [index, cards.length],
-  );
-
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       if (!touchStart.current) return;
       const dx = e.changedTouches[0].clientX - touchStart.current.x;
       const dy = e.changedTouches[0].clientY - touchStart.current.y;
-      setDragX(0); // always snap back (transition handles the animation)
       const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 48;
       if (isHorizontal) {
         didSwipe.current = true;
-        setIsFlipped(false);
-        if (dx < 0 && index < cards.length - 1) setIndex(i => i + 1);
-        if (dx > 0 && index > 0) setIndex(i => i - 1);
+        if (dx < 0) navigate('next');
+        else navigate('prev');
       }
+      touchStart.current = null;
     },
-    [index, cards.length],
+    [navigate],
   );
 
-  // Flip only when the gesture was a tap, not a drag
+  // Flip only when the gesture was a tap, not a swipe
   const handleFlipGuarded = useCallback(() => {
-    if (didSwipe.current) return;
+    if (didSwipe.current || animDir !== null) return;
     handleFlip();
-  }, [handleFlip]);
+  }, [handleFlip, animDir]);
 
-  const dragProgress = Math.min(Math.abs(dragX) / 80, 1); // 0→1 for overlay opacity
+  // ── Compute which cards to render in the stack ─────────────────
+  // next anim:  index(exit-next), index+1(top), index+2(mid), index+3(back)
+  // prev anim:  index-1(top+enterAnim), index(mid), index+1(back), index+2(exit-prev)
+  // normal:     index(top), index+1(mid), index+2(back)
+  const stackItems = useMemo((): StackItem[] => {
+    const clamp = (i: number) => i >= 0 && i < cards.length;
+
+    if (animDir === 'next') {
+      const items: StackItem[] = [
+        { cardIdx: index, pos: 'exit-next', enterAnim: false },
+      ];
+      const posList: StackPos[] = ['top', 'mid', 'back'];
+      for (let off = 1; off <= 3; off++) {
+        if (clamp(index + off)) {
+          items.push({ cardIdx: index + off, pos: posList[off - 1], enterAnim: false });
+        }
+      }
+      return items;
+    }
+
+    if (animDir === 'prev') {
+      const items: StackItem[] = [];
+      if (clamp(index - 1)) {
+        items.push({ cardIdx: index - 1, pos: 'top', enterAnim: true });
+      }
+      items.push({ cardIdx: index, pos: 'mid', enterAnim: false });
+      if (clamp(index + 1)) {
+        items.push({ cardIdx: index + 1, pos: 'back', enterAnim: false });
+      }
+      if (clamp(index + 2)) {
+        items.push({ cardIdx: index + 2, pos: 'exit-prev', enterAnim: false });
+      }
+      return items;
+    }
+
+    // Normal (no animation)
+    const items: StackItem[] = [
+      { cardIdx: index, pos: 'top', enterAnim: false },
+    ];
+    if (clamp(index + 1)) items.push({ cardIdx: index + 1, pos: 'mid', enterAnim: false });
+    if (clamp(index + 2)) items.push({ cardIdx: index + 2, pos: 'back', enterAnim: false });
+    return items;
+  }, [index, animDir, cards.length]);
 
   return (
     <div className="flex flex-col min-h-screen max-w-lg mx-auto">
@@ -245,54 +312,44 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
         />
       </div>
 
-      {/* Card + actions */}
+      {/* Card stack + actions */}
       <div className="flex-1 flex flex-col px-4 py-5 gap-5">
-        {/* Drag wrapper — translates card with finger, snaps back on release */}
+
+        {/* Stacked card container */}
         <div
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
           className="relative"
-          style={{
-            transform: dragX
-              ? `translateX(${dragX}px) rotate(${dragX * 0.018}deg)`
-              : undefined,
-            transition: dragX === 0
-              ? 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
-              : 'none',
-            touchAction: 'pan-y',
-          }}
+          style={{ height: 'calc(52vh + 24px)', minHeight: '304px', maxHeight: '464px' }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
-          <FlashCard
-            card={currentCard}
-            colorIndex={colorMap[index]}
-            isFlipped={isFlipped}
-            onFlip={handleFlipGuarded}
-          />
-
-          {/* ← Prev indicator */}
-          {dragX > 20 && index > 0 && (
-            <div
-              className="absolute inset-0 rounded-3xl flex items-center justify-start pl-5 pointer-events-none"
-              style={{ opacity: dragProgress }}
-            >
-              <div className="bg-white/25 backdrop-blur-sm rounded-2xl px-3 py-1.5">
-                <span className="text-white font-bold text-sm drop-shadow">← Prev</span>
+          {stackItems.map(item => {
+            const isInteractive = item.pos === 'top' && !item.enterAnim && animDir === null;
+            return (
+              <div
+                key={item.cardIdx}
+                className="absolute inset-x-0 top-0"
+                style={{
+                  ...stackStyle(item.pos),
+                  transition: item.enterAnim
+                    ? 'none'
+                    : `transform ${ANIM_MS}ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${ANIM_MS}ms ease`,
+                  animation: item.enterAnim
+                    ? `cardEnterPrev ${ANIM_MS}ms cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`
+                    : undefined,
+                  pointerEvents: isInteractive ? 'auto' : 'none',
+                }}
+              >
+                <FlashCard
+                  card={cards[item.cardIdx]}
+                  colorIndex={colorMap[item.cardIdx]}
+                  cardNumber={item.cardIdx + 1}
+                  totalCards={cards.length}
+                  isFlipped={isInteractive ? isFlipped : false}
+                  onFlip={isInteractive ? handleFlipGuarded : () => {}}
+                />
               </div>
-            </div>
-          )}
-
-          {/* Next → indicator */}
-          {dragX < -20 && index < cards.length - 1 && (
-            <div
-              className="absolute inset-0 rounded-3xl flex items-center justify-end pr-5 pointer-events-none"
-              style={{ opacity: dragProgress }}
-            >
-              <div className="bg-white/25 backdrop-blur-sm rounded-2xl px-3 py-1.5">
-                <span className="text-white font-bold text-sm drop-shadow">Next →</span>
-              </div>
-            </div>
-          )}
+            );
+          })}
         </div>
 
         {/* Navigation hint */}
@@ -321,8 +378,8 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
         ) : (
           <div className="flex gap-2">
             <button
-              onClick={() => { setIndex(i => i - 1); setIsFlipped(false); }}
-              disabled={index === 0}
+              onClick={() => navigate('prev')}
+              disabled={index === 0 || animDir !== null}
               className="py-4 px-4 bg-white text-stone-500 border border-stone-200 rounded-2xl font-medium text-sm active:scale-[0.98] transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
               aria-label="Previous card"
             >
@@ -330,13 +387,14 @@ export function StudySession({ playlists, title, onExit }: StudySessionProps) {
             </button>
             <button
               onClick={handleFlip}
-              className="flex-1 py-4 bg-violet-600 text-white rounded-2xl font-bold text-sm active:scale-[0.98] transition-all shadow-lg shadow-violet-200"
+              disabled={animDir !== null}
+              className="flex-1 py-4 bg-violet-600 text-white rounded-2xl font-bold text-sm active:scale-[0.98] transition-all shadow-lg shadow-violet-200 disabled:opacity-60"
             >
               Reveal Answer
             </button>
             <button
-              onClick={() => { setIndex(i => i + 1); setIsFlipped(false); }}
-              disabled={index === cards.length - 1}
+              onClick={() => navigate('next')}
+              disabled={index === cards.length - 1 || animDir !== null}
               className="py-4 px-4 bg-white text-stone-500 border border-stone-200 rounded-2xl font-medium text-sm active:scale-[0.98] transition-all shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
               aria-label="Next card"
             >
