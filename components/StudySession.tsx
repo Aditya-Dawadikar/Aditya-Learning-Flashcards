@@ -22,13 +22,13 @@ function stackStyle(pos: StackPos): React.CSSProperties {
     case 'top':
       return { transform: 'translateY(0px) scale(1)', opacity: 1, zIndex: 30 };
     case 'mid':
-      return { transform: 'translateY(12px) scale(0.95)', opacity: 1, zIndex: 20 };
+      return { transform: 'translateY(12px) translateX(6px) scale(0.95)', opacity: 1, zIndex: 20 };
     case 'back':
-      return { transform: 'translateY(24px) scale(0.90)', opacity: 1, zIndex: 10 };
+      return { transform: 'translateY(22px) translateX(12px) scale(0.90)', opacity: 1, zIndex: 10 };
     case 'exit-next':
-      return { transform: 'translateY(36px) scale(0.82) rotate(4deg)', opacity: 0, zIndex: 5 };
+      return { transform: 'translateY(34px) translateX(18px) scale(0.82) rotate(4deg)', opacity: 0, zIndex: 5 };
     case 'exit-prev':
-      return { transform: 'translateY(36px) scale(0.82) rotate(-4deg)', opacity: 0, zIndex: 5 };
+      return { transform: 'translateY(34px) translateX(18px) scale(0.82) rotate(-4deg)', opacity: 0, zIndex: 5 };
   }
 }
 

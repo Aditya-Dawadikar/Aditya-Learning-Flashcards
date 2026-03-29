@@ -33,11 +33,11 @@
 /* ── Card stack animations ──────────────────────────────────── */
 @keyframes cardEnterPrev {
   from {
-    transform: translateY(28px) scale(0.86) rotate(-2deg);
+    transform: translateY(28px) translateX(14px) scale(0.86) rotate(-2deg);
     opacity: 0;
   }
   to {
-    transform: translateY(0px) scale(1) rotate(0deg);
+    transform: translateY(0px) translateX(0px) scale(1) rotate(0deg);
     opacity: 1;
   }
 }
